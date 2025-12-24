@@ -1,0 +1,69 @@
+# ICE EXC API: TTY Control
+# Defines all TTY-related requests that managers may make to MPM
+
+API_NAME: tty
+VERSION: 1.0
+
+# ==============================================================================
+# REQUEST DEFINITIONS
+# ==============================================================================
+
+REQUEST: bind
+  DESCRIPTION: Bind a process to a TTY (kernel internal use)
+  CALLERS: [kernel]
+  PARAMS:
+    - pid: uint32 (required)
+    - tty_id: int (required)
+  RETURNS:
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_NOT_FOUND
+    - MPM_ERR_INVALID_STATE
+
+REQUEST: unbind
+  DESCRIPTION: Unbind a process from its TTY (kernel internal use)
+  CALLERS: [kernel]
+  PARAMS:
+    - pid: uint32 (required)
+  RETURNS:
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_NOT_FOUND
+
+REQUEST: write
+  DESCRIPTION: Write to TTY
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - buffer: string (required)
+  RETURNS:
+    - bytes_written: size_t
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_IO_ERROR
+
+REQUEST: read
+  DESCRIPTION: Read from TTY
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - max_bytes: size_t (required)
+  RETURNS:
+    - buffer: string
+    - bytes_read: size_t
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_IO_ERROR
+
+REQUEST: color
+  DESCRIPTION: Set TTY color scheme
+  CALLERS: [gpm]
+  PARAMS:
+    - scheme: int (required, 1-4)
+  RETURNS:
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_INVALID_REQUEST

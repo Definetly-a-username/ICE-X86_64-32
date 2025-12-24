@@ -1,0 +1,58 @@
+# ICE EXC API: Filesystem Operations
+# Defines all filesystem-related requests that managers may make to MPM
+
+API_NAME: fs
+VERSION: 1.0
+
+# ==============================================================================
+# REQUEST DEFINITIONS
+# ==============================================================================
+
+REQUEST: read
+  DESCRIPTION: Read contents of a file
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - path: string (required)
+  RETURNS:
+    - contents: bytes
+    - size: size_t
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_NOT_FOUND
+    - MPM_ERR_IO_ERROR
+
+REQUEST: write
+  DESCRIPTION: Write contents to a file
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - path: string (required)
+    - contents: bytes (required)
+  RETURNS:
+    - bytes_written: size_t
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_IO_ERROR
+
+REQUEST: list
+  DESCRIPTION: List directory contents
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - path: string (required)
+  RETURNS:
+    - entries: array of string
+    - count: int
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_NOT_FOUND
+
+REQUEST: exists
+  DESCRIPTION: Check if a path exists
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - path: string (required)
+  RETURNS:
+    - exists: bool
+    - is_directory: bool
+  ERRORS:
+    - MPM_OK

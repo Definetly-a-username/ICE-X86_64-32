@@ -1,0 +1,63 @@
+# ICE EXC API: Process Control
+# Defines all process-related requests that managers may make to MPM
+
+API_NAME: process
+VERSION: 1.0
+
+# ==============================================================================
+# REQUEST DEFINITIONS
+# ==============================================================================
+
+REQUEST: list_processes
+  DESCRIPTION: List all running processes
+  CALLERS: [pm, gpm]
+  PARAMS: none
+  RETURNS:
+    - count: int
+    - processes: array of process_info
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_INVALID_REQUEST
+
+REQUEST: kill_process
+  DESCRIPTION: Request termination of a process
+  CALLERS: [pm]
+  PARAMS:
+    - exec_id: uint32 (required)
+  RETURNS:
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_NOT_FOUND
+    - MPM_ERR_INVALID_STATE
+
+REQUEST: restart_process
+  DESCRIPTION: Request restart of a process
+  CALLERS: [pm]
+  PARAMS:
+    - exec_id: uint32 (required)
+  RETURNS:
+    - success: bool
+    - new_pid: uint32
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_NOT_FOUND
+    - MPM_ERR_NO_MEMORY
+
+REQUEST: get_process_info
+  DESCRIPTION: Get detailed information about a process
+  CALLERS: [pm, gpm]
+  PARAMS:
+    - exec_id: uint32 (required)
+  RETURNS:
+    - process_info: struct
+      - pid: uint32
+      - exec_id: uint32
+      - state: enum (OFF, ON, PAUSED, ZOMBIE)
+      - memory_used: size_t
+      - tty_id: int
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_NOT_FOUND

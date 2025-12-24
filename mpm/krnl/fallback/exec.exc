@@ -1,0 +1,59 @@
+# ICE EXC API: Execution Control
+# Defines all execution-related requests that managers may make to MPM
+
+API_NAME: exec
+VERSION: 1.0
+
+# ==============================================================================
+# REQUEST DEFINITIONS
+# ==============================================================================
+
+REQUEST: run
+  DESCRIPTION: Execute a registered executable
+  CALLERS: [gpm]
+  PARAMS:
+    - exec_id: uint32 (required)
+  RETURNS:
+    - pid: uint32
+    - success: bool
+  PROCESS:
+    1. MPM validates request
+    2. MPM sets process state to ON
+    3. MPM allocates memory
+    4. MPM binds TTY
+    5. MPM schedules execution
+    6. Hardware executes
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_NOT_FOUND
+    - MPM_ERR_NO_MEMORY
+    - MPM_ERR_INVALID_STATE
+
+REQUEST: register
+  DESCRIPTION: Register a new executable in the registry
+  CALLERS: [gpm]
+  PARAMS:
+    - path: string (required, path to compiled .exc file)
+    - flags: uint8 (optional, default 0)
+  RETURNS:
+    - exec_id: uint32
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_INVALID_FORMAT
+    - MPM_ERR_ALREADY_EXISTS
+    - MPM_ERR_REGISTRY_FULL
+
+REQUEST: unregister
+  DESCRIPTION: Remove an executable from the registry
+  CALLERS: [gpm, kernel]
+  PARAMS:
+    - exec_id: uint32 (required)
+  RETURNS:
+    - success: bool
+  ERRORS:
+    - MPM_OK
+    - MPM_ERR_UNAUTHORIZED
+    - MPM_ERR_NOT_FOUND
