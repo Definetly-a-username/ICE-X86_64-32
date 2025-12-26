@@ -35,7 +35,17 @@ void tty_clear(void);
  
 void tty_set_prompt(const char *prompt);
 
- 
+// Print colored prompt
 void tty_print_prompt(void);
+
+// Get hostname from config
+const char *tty_get_hostname(void);
+
+// Get theme colors
+int tty_get_error_color(void);
+int tty_get_success_color(void);
+
+// Reload configuration from /.icetty
+void tty_reload_config(void);
 
 #endif  

@@ -56,7 +56,14 @@ bool net_is_available(void);
  
 int net_arp_resolve(ipv4_addr_t ip, mac_addr_t *mac);
 
- 
+// Ping a host (returns RTT in ms, negative on error)
 int net_ping(ipv4_addr_t dst, int timeout_ms);
+
+// Get network statistics
+net_stats_t* net_get_stats(void);
+
+// IP address utilities
+void net_ip_to_str(ipv4_addr_t ip, char *str);
+ipv4_addr_t net_str_to_ip(const char *str);
 
 #endif  

@@ -2,6 +2,7 @@
 
 #include "idt.h"
 #include "gdt.h"
+#include "../drivers/pic.h"
 #include "../drivers/vga.h"
 
  
@@ -196,14 +197,9 @@ void isr_handler(interrupt_frame_t *frame) {
  
 void irq_handler(interrupt_frame_t *frame) {
      
-    if (frame->int_no >= 40) {
-         
-        __asm__ volatile ("outb %0, %1" : : "a"((u8)0x20), "Nd"((u16)0xA0));
-    }
-     
-    __asm__ volatile ("outb %0, %1" : : "a"((u8)0x20), "Nd"((u16)0x20));
-    
     if (handlers[frame->int_no]) {
         handlers[frame->int_no](frame);
     }
+    
+    pic_send_eoi(frame->int_no - 32);
 }

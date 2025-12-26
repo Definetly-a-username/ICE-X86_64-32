@@ -1,6 +1,5 @@
-#include "fs/ext2.h"
- 
-
+#include "fs/vfs.h"
+#include "fs/blockdev.h"
 #include "core/mpm.h"
 #include "drivers/vga.h"
 #include "cpu/gdt.h"
@@ -61,9 +60,22 @@ void kernel_main(uint32_t magic, void *mboot_info) {
     tty_init();
     vga_puts("OK\n");
 
-     
-    vga_puts("[BOOT] Mounting Filesystem (EXT2)... ");
-    if (ext2_init() == 0) {
+    
+    vga_puts("[BOOT] Initializing block devices... ");
+    blockdev_init();
+    vga_puts("OK\n");
+    
+    vga_puts("[BOOT] Initializing VFS... ");
+    vfs_init();
+    vga_puts("OK\n");
+    
+    vga_puts("[BOOT] Mounting Filesystem (EXT2/EXT4)... ");
+    // Try EXT4 first, fall back to EXT2
+    int fs_ret = vfs_mount(BLOCKDEV_PRIMARY, VFS_FS_EXT4);
+    if (fs_ret < 0) {
+        fs_ret = vfs_mount(BLOCKDEV_PRIMARY, VFS_FS_EXT2);
+    }
+    if (fs_ret == 0) {
         vga_puts("OK\n");
     } else {
         vga_puts("FAILED (Check disk)\n");

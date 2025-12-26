@@ -1,24 +1,22 @@
- 
+/*
+ * ICE OS Programmable Interval Timer (PIT) Driver
+ */
 
 #include "pit.h"
 #include "pic.h"
 #include "../cpu/idt.h"
 
- 
 static inline void outb(u16 port, u8 value) {
     __asm__ volatile ("outb %0, %1" : : "a"(value), "Nd"(port));
 }
 
- 
 static volatile u64 tick_count = 0;
 static u32 tick_frequency = 0;
 
- 
+// Timer interrupt handler
 static void pit_handler(interrupt_frame_t *frame) {
     (void)frame;
     tick_count++;
-    
-     
 }
 
 void pit_init(u32 frequency) {

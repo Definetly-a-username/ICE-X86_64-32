@@ -2,6 +2,7 @@
 
 #include "ata.h"
 #include "vga.h"
+#include "pit.h"
 
  
 static inline void outb(u16 port, u8 value) {
@@ -27,23 +28,34 @@ static bool drive_present = false;
 
  
 static int ata_wait_ready(void) {
-    int timeout = 100000;
-    while (timeout--) {
+    // Use iteration count to be safe even if interrupts are disabled (PIT won't update)
+    // 100,000 iterations * ~1us (pause + inb) = ~100ms
+    // Increase to 1,000,000 for generous timeout (~1s)
+    u32 retries = 1000000;
+    while (retries-- > 0) {
         u8 status = inb(ATA_PRIMARY_STATUS);
         if (!(status & ATA_STATUS_BSY)) {
             return 0;
         }
+        // Small delay
+        __asm__ volatile("pause");
+        
+        // Also check error
+        if (status & ATA_STATUS_ERR) return -1;
+        if (status & ATA_STATUS_DF) return -1;
     }
     return -1;   
 }
 
  
 static int ata_wait_drq(void) {
-    int timeout = 100000;
-    while (timeout--) {
+    u32 retries = 1000000;
+    while (retries-- > 0) {
         u8 status = inb(ATA_PRIMARY_STATUS);
         if (status & ATA_STATUS_ERR) return -1;
+        if (status & ATA_STATUS_DF) return -1; // Drive Fault
         if (status & ATA_STATUS_DRQ) return 0;
+        __asm__ volatile("pause");
     }
     return -1;
 }
@@ -51,7 +63,11 @@ static int ata_wait_drq(void) {
 int ata_init(void) {
      
     outb(ATA_PRIMARY_CONTROL, 0x04);   
-    for (int i = 0; i < 10000; i++) inb(ATA_PRIMARY_STATUS);   
+    // Reduced delay - hardware should stabilize faster
+    // Use a smaller, more efficient delay loop
+    for (volatile int i = 0; i < 1000; i++) {
+        inb(ATA_PRIMARY_STATUS);
+    }
     outb(ATA_PRIMARY_CONTROL, 0x00);   
     
      

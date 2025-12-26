@@ -56,17 +56,38 @@ ice_pid_t scheduler_create_process(const char *name, u32 entry_point) {
     proc->state = PROC_STATE_READY;
     strncpy_s(proc->name, name, sizeof(proc->name));
     
-     
+    // Allocate kernel stack
     proc->kernel_stack = pmm_alloc_page();
     if (!proc->kernel_stack) {
         return 0;   
     }
     
-     
+    // Initialize context on the stack
+    // Stack grows down: EIP, EFLAGS, Segs(4), Regs(8)
+    u32 *stack = (u32*)(proc->kernel_stack + PAGE_SIZE);
+    
+    *(--stack) = entry_point;    // Return address (EIP)
+    *(--stack) = 0x202;          // EFLAGS (IF | reserved)
+    
+    *(--stack) = 0x10;           // GS
+    *(--stack) = 0x10;           // FS
+    *(--stack) = 0x10;           // ES
+    *(--stack) = 0x10;           // DS
+    
+    *(--stack) = 0;              // EAX
+    *(--stack) = 0;              // ECX
+    *(--stack) = 0;              // EDX
+    *(--stack) = 0;              // EBX
+    *(--stack) = 0;              // ESP (ignored)
+    *(--stack) = 0;              // EBP
+    *(--stack) = 0;              // ESI
+    *(--stack) = 0;              // EDI
+    
+    proc->saved_esp = (u32)stack;
+    
+    // Legacy support: keep struct updated if anyone uses it
     proc->context.eip = entry_point;
-    proc->context.esp = proc->kernel_stack + PAGE_SIZE - 16;
-    proc->context.eflags = 0x202;   
-    proc->context.cr3 = 0;   
+    proc->context.esp = proc->saved_esp;
     
     proc->memory_used = PAGE_SIZE;
     proc->tty_id = 0;
@@ -116,27 +137,46 @@ void scheduler_tick(void) {
     }
 }
 
+extern void process_switch_context(u32 *old_esp_ptr, u32 new_esp);
+
 void scheduler_yield(void) {
     if (process_count == 0) return;
     
-     
+    // Round robin scheduling
     int start = (current_process + 1) % MAX_PROCESSES;
     int i = start;
+    int next_process = -1;
     
     do {
         if (process_table[i].state == PROC_STATE_READY) {
-             
-            if (current_process >= 0 && 
-                process_table[current_process].state == PROC_STATE_RUNNING) {
-                process_table[current_process].state = PROC_STATE_READY;
-            }
-            
-            current_process = i;
-            process_table[i].state = PROC_STATE_RUNNING;
-            return;
+            next_process = i;
+            break;
         }
         i = (i + 1) % MAX_PROCESSES;
     } while (i != start);
+    
+    if (next_process >= 0) {
+        // Switch required
+        int prev_process = current_process;
+        pcb_t *prev = prev_process >= 0 ? &process_table[prev_process] : 0;
+        pcb_t *next = &process_table[next_process];
+        
+        if (prev && prev->state == PROC_STATE_RUNNING) {
+            prev->state = PROC_STATE_READY;
+        }
+        
+        next->state = PROC_STATE_RUNNING;
+        current_process = next_process;
+        
+        // Perform actual context switch
+        if (prev) {
+            process_switch_context(&prev->saved_esp, next->saved_esp);
+        } else {
+             // First switch, special case: just dummy old pointer
+            u32 dummy;
+            process_switch_context(&dummy, next->saved_esp);
+        }
+    }
 }
 
 pcb_t* scheduler_get_current(void) {

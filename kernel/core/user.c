@@ -2,6 +2,7 @@
 
 #include "user.h"
 #include "../drivers/vga.h"
+#include <string.h>
 
  
 static user_t users[MAX_USERS];
@@ -10,30 +11,22 @@ static uid_t next_uid = 1;
 static uid_t current_uid = UID_INVALID;
 
  
-static int str_len(const char *s) {
-    int len = 0;
-    while (*s++) len++;
-    return len;
-}
 
-static void str_copy(char *dest, const char *src, int max) {
-    int i;
-    for (i = 0; i < max - 1 && src[i]; i++) {
-        dest[i] = src[i];
-    }
-    dest[i] = '\0';
-}
-
-static int str_cmp(const char *a, const char *b) {
-    while (*a && *a == *b) { a++; b++; }
-    return *a - *b;
-}
 
  
-static u32 simple_hash(const char *s) {
-    u32 hash = 5381;
+// Rotate left helper
+static inline u32 rotl(u32 x, int n) {
+    return (x << n) | (x >> (32 - n));
+}
+
+// Salted hash function (using uid as salt context)
+static u32 hash_password(const char *s, uid_t salt_uid) {
+    u32 hash = 0xDEADBEEF;
+    hash ^= salt_uid; // Salt with UID
+    
     while (*s) {
-        hash = ((hash << 5) + hash) + *s++;
+        hash = rotl(hash, 5) ^ *s++;
+        hash = (hash * 1664525) + 1013904223; // LCG mixing
     }
     return hash;
 }
@@ -58,11 +51,12 @@ void user_init(void) {
 
 uid_t user_create(const char *username, const char *password, user_type_t type) {
     if (user_count >= MAX_USERS) return UID_INVALID;
-    if (str_len(username) == 0 || str_len(username) >= MAX_USERNAME) return UID_INVALID;
+    if (strlen(username) == 0 || strlen(username) >= MAX_USERNAME) return UID_INVALID;
+    if (strlen(password) == 0 || strlen(password) >= 64) return UID_INVALID; // Max password input limit
     
      
     for (int i = 0; i < MAX_USERS; i++) {
-        if (users[i].active && str_cmp(users[i].username, username) == 0) {
+        if (users[i].active && strcmp(users[i].username, username) == 0) {
             return UID_INVALID;
         }
     }
@@ -80,17 +74,19 @@ uid_t user_create(const char *username, const char *password, user_type_t type) 
     
     user_t *u = &users[slot];
     u->uid = next_uid++;
-    str_copy(u->username, username, MAX_USERNAME);
+    strncpy(u->username, username, MAX_USERNAME);
+    u->username[MAX_USERNAME - 1] = '\0';
     
      
-    u32 hash = simple_hash(password);
+    u32 hash = hash_password(password, u->uid);
     char hash_str[12];
     for (int i = 0; i < 8; i++) {
         hash_str[i] = '0' + ((hash >> (i * 4)) & 0xF);
         if (hash_str[i] > '9') hash_str[i] = 'a' + (hash_str[i] - '0' - 10);
     }
     hash_str[8] = '\0';
-    str_copy(u->password, hash_str, MAX_PASSWORD);
+    strncpy(u->password, hash_str, MAX_PASSWORD);
+    u->password[MAX_PASSWORD - 1] = '\0';
     
     u->type = type;
     u->active = true;
@@ -102,8 +98,21 @@ uid_t user_create(const char *username, const char *password, user_type_t type) 
 }
 
 uid_t user_login(const char *username, const char *password) {
+    if (strlen(username) >= MAX_USERNAME || strlen(password) >= 64) return UID_INVALID;
      
-    u32 hash = simple_hash(password);
+    // Find user first to get salt (UID)
+    user_t *target_user = 0;
+    for (int i = 0; i < MAX_USERS; i++) {
+        if (users[i].active && strcmp(users[i].username, username) == 0) {
+            target_user = &users[i];
+            break;
+        }
+    }
+    
+    if (!target_user) return UID_INVALID;
+    
+    // Hash password with salt
+    u32 hash = hash_password(password, target_user->uid);
     char hash_str[12];
     for (int i = 0; i < 8; i++) {
         hash_str[i] = '0' + ((hash >> (i * 4)) & 0xF);
@@ -111,17 +120,10 @@ uid_t user_login(const char *username, const char *password) {
     }
     hash_str[8] = '\0';
     
-     
-    for (int i = 0; i < MAX_USERS; i++) {
-        if (users[i].active && str_cmp(users[i].username, username) == 0) {
-            if (str_cmp(users[i].password, hash_str) == 0) {
-                 
-                users[i].logged_in = true;
-                current_uid = users[i].uid;
-                return users[i].uid;
-            }
-            break;
-        }
+    if (strcmp(target_user->password, hash_str) == 0) {
+        target_user->logged_in = true;
+        current_uid = target_user->uid;
+        return target_user->uid;
     }
     
     return UID_INVALID;
@@ -192,7 +194,7 @@ int user_change_password(uid_t uid, const char *old_pw, const char *new_pw) {
     if (!u) return -1;
     
      
-    u32 old_hash = simple_hash(old_pw);
+    u32 old_hash = hash_password(old_pw, u->uid);
     char hash_str[12];
     for (int i = 0; i < 8; i++) {
         hash_str[i] = '0' + ((old_hash >> (i * 4)) & 0xF);
@@ -200,18 +202,18 @@ int user_change_password(uid_t uid, const char *old_pw, const char *new_pw) {
     }
     hash_str[8] = '\0';
     
-    if (str_cmp(u->password, hash_str) != 0) {
+    if (strcmp(u->password, hash_str) != 0) {
         return -1;   
     }
     
      
-    u32 new_hash = simple_hash(new_pw);
+    u32 new_hash = hash_password(new_pw, u->uid);
     for (int i = 0; i < 8; i++) {
         hash_str[i] = '0' + ((new_hash >> (i * 4)) & 0xF);
         if (hash_str[i] > '9') hash_str[i] = 'a' + (hash_str[i] - '0' - 10);
     }
     hash_str[8] = '\0';
-    str_copy(u->password, hash_str, MAX_PASSWORD);
+    strncpy(u->password, hash_str, MAX_PASSWORD);
     
     return 0;
 }

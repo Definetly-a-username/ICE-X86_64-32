@@ -19,12 +19,12 @@ typedef enum {
 
  
 typedef struct {
-    u32 eax, ebx, ecx, edx;
-    u32 esi, edi, ebp;
-    u32 eip;
-    u32 esp;
-    u32 eflags;
-    u32 cr3;   
+    u32 gs, fs, es, ds;      // Segment registers
+    u32 edi, esi, ebp, esp;  // Pushed by pusha
+    u32 ebx, edx, ecx, eax;  // Pushed by pusha
+    u32 eip;                 // Instruction pointer
+    u32 eflags;              // Flags
+    u32 cr3;                 // CR3 (PDBR) - kept for future paging support
 } cpu_context_t;
 
  
@@ -37,7 +37,8 @@ typedef struct {
      
     cpu_context_t context;
     
-     
+    u32 saved_esp;
+    
     u32 kernel_stack;
     u32 user_stack;
     

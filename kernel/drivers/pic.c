@@ -18,37 +18,33 @@ static inline void io_wait(void) {
 }
 
 void pic_init(void) {
-     
-    u8 mask1 = inb(PIC1_DATA);
-    u8 mask2 = inb(PIC2_DATA);
-    
-     
+    // ICW1: Initialize + ICW4 needed
     outb(PIC1_COMMAND, 0x11);    
     io_wait();
     outb(PIC2_COMMAND, 0x11);
     io_wait();
     
-     
+    // ICW2: Vector offsets (IRQ0 = int 32, IRQ8 = int 40)
     outb(PIC1_DATA, 0x20);       
     io_wait();
     outb(PIC2_DATA, 0x28);       
     io_wait();
     
-     
+    // ICW3: Cascade identity
     outb(PIC1_DATA, 0x04);       
     io_wait();
     outb(PIC2_DATA, 0x02);       
     io_wait();
     
-     
+    // ICW4: 8086 mode
     outb(PIC1_DATA, 0x01);
     io_wait();
     outb(PIC2_DATA, 0x01);
     io_wait();
     
-     
-    outb(PIC1_DATA, mask1);
-    outb(PIC2_DATA, mask2);
+    // Mask all IRQs initially (will be unmasked as needed)
+    outb(PIC1_DATA, 0xFB);  // All masked except cascade (IRQ2)
+    outb(PIC2_DATA, 0xFF);  // All masked
 }
 
 void pic_send_eoi(u8 irq) {

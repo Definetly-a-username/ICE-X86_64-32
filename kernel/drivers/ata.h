@@ -26,6 +26,7 @@
 #define ATA_STATUS_BSY          0x80
 #define ATA_STATUS_DRDY         0x40
 #define ATA_STATUS_DRQ          0x08
+#define ATA_STATUS_DF           0x20
 #define ATA_STATUS_ERR          0x01
 
  

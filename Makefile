@@ -7,7 +7,7 @@ LD := ld
 
 # Flags
 CFLAGS = -m32 -ffreestanding -fno-stack-protector -fno-pic -nostdlib \
-         -Wall -Wextra -Wno-unused-function -I. -Ikernel -O2 \
+         -Wall -Wextra -Wno-unused-function -I. -Ikernel -Ikernel/lib -O2 \
          -mno-sse -mno-sse2 -mno-mmx -m80387
 ASFLAGS = -f elf32
 LDFLAGS = -m elf_i386 -T kernel/linker.ld -nostdlib
@@ -19,9 +19,13 @@ ISO_DIR = iso
 
 # Source files
 ASM_SOURCES = $(KERNEL_DIR)/boot/boot.asm \
-              $(KERNEL_DIR)/cpu/isr.asm
+              $(KERNEL_DIR)/cpu/isr.asm \
+              $(KERNEL_DIR)/cpu/context.asm
 
 C_SOURCES = $(KERNEL_DIR)/kernel_main.c \
+            $(KERNEL_DIR)/sync/spinlock.c \
+            $(KERNEL_DIR)/lib/string.c \
+            $(KERNEL_DIR)/errno.c \
             $(KERNEL_DIR)/cpu/gdt.c \
             $(KERNEL_DIR)/cpu/idt.c \
             $(KERNEL_DIR)/drivers/pic.c \
@@ -29,6 +33,8 @@ C_SOURCES = $(KERNEL_DIR)/kernel_main.c \
             $(KERNEL_DIR)/drivers/pit.c \
             $(KERNEL_DIR)/drivers/keyboard.c \
             $(KERNEL_DIR)/drivers/ata.c \
+            $(KERNEL_DIR)/drivers/serial.c \
+            $(KERNEL_DIR)/drivers/mouse.c \
             $(KERNEL_DIR)/mm/pmm.c \
             $(KERNEL_DIR)/tty/tty.c \
             $(KERNEL_DIR)/tty/console.c \
@@ -37,11 +43,18 @@ C_SOURCES = $(KERNEL_DIR)/kernel_main.c \
             $(KERNEL_DIR)/core/bootval.c \
             $(KERNEL_DIR)/core/user.c \
             $(KERNEL_DIR)/core/sysinfo.c \
+            $(KERNEL_DIR)/errno.c \
             $(KERNEL_DIR)/proc/scheduler.c \
-            $(KERNEL_DIR)/fs/fat32.c \
+            $(KERNEL_DIR)/fs/blockdev.c \
+            $(KERNEL_DIR)/fs/vfs.c \
             $(KERNEL_DIR)/fs/ext2.c \
+            $(KERNEL_DIR)/fs/ext4.c \
             $(KERNEL_DIR)/apps/apps.c \
             $(KERNEL_DIR)/apps/apm.c \
+            $(KERNEL_DIR)/apps/script.c \
+            $(KERNEL_DIR)/gui/gui.c \
+            $(KERNEL_DIR)/gui/vesa.c \
+            $(KERNEL_DIR)/frost/frost.c \
             $(KERNEL_DIR)/net/net.c
 
 # Object files
@@ -73,11 +86,17 @@ $(BUILD_DIR)/boot.o: $(KERNEL_DIR)/boot/boot.asm
 $(BUILD_DIR)/isr.o: $(KERNEL_DIR)/cpu/isr.asm
 	$(AS) $(ASFLAGS) -o $@ $<
 
+$(BUILD_DIR)/context.o: $(KERNEL_DIR)/cpu/context.asm
+	$(AS) $(ASFLAGS) -o $@ $<
+
 # Generic C compilation rule
 $(BUILD_DIR)/%.o: $(KERNEL_DIR)/*/%.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/kernel_main.o: $(KERNEL_DIR)/kernel_main.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/errno.o: $(KERNEL_DIR)/errno.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Create bootable ISO

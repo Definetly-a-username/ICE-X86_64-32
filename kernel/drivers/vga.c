@@ -56,6 +56,8 @@ void vga_set_color(vga_color_t fg, vga_color_t bg) {
 void vga_clear(void) {
     for (int y = 0; y < VGA_HEIGHT; y++) {
         for (int x = 0; x < VGA_WIDTH; x++) {
+            // Preserve keyboard debug area (row 0, cols 66-79)
+            if (y == 0 && x >= 66) continue;
             vga_buffer[y * VGA_WIDTH + x] = vga_entry(' ', current_color);
         }
     }

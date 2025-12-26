@@ -2,43 +2,27 @@
 
 #include "apm.h"
 #include "apps.h"
+#include "script.h"
 #include "../tty/tty.h"
 #include "../drivers/vga.h"
-#include "../fs/fat32.h"
+#include "../fs/vfs.h"
 #include "../core/exc.h"
 #include "../core/user.h"
-
+#include <string.h>
  
 static apm_entry_t packages[MAX_PACKAGES];
 static int package_count = 0;
 static u32 next_package_id = 1;
 
  
-static int str_cmp(const char *a, const char *b) {
-    while (*a && *a == *b) { a++; b++; }
-    return *a - *b;
-}
 
-static void str_copy(char *dest, const char *src, int max) {
-    int i;
-    for (i = 0; i < max - 1 && src[i]; i++) {
-        dest[i] = src[i];
-    }
-    dest[i] = '\0';
-}
-
-static int str_len(const char *s) {
-    int len = 0;
-    while (*s++) len++;
-    return len;
-}
 
  
 static bool str_endswith(const char *s, const char *suffix) {
-    int slen = str_len(s);
-    int suflen = str_len(suffix);
+    int slen = strlen(s);
+    int suflen = strlen(suffix);
     if (suflen > slen) return false;
-    return str_cmp(s + slen - suflen, suffix) == 0;
+    return strcmp(s + slen - suflen, suffix) == 0;
 }
 
  
@@ -95,7 +79,7 @@ const char* apm_lang_name(apm_lang_t lang) {
 }
 
 int apm_install(const char *path) {
-    if (!fat32_is_mounted()) {
+    if (!vfs_is_mounted()) {
         tty_puts("apm: No filesystem mounted.\n");
         return -1;
     }
@@ -107,7 +91,7 @@ int apm_install(const char *path) {
     }
     
      
-    fat32_file_t *f = fat32_open(path);
+    vfs_file_t *f = vfs_open(path);
     if (!f) {
         tty_printf("apm: Package not found: %s\n", path);
         return -1;
@@ -115,17 +99,17 @@ int apm_install(const char *path) {
     
      
     apm_header_t header;
-    int n = fat32_read(f, &header, sizeof(header));
+    int n = vfs_read(f, &header, sizeof(header));
     if (n < (int)sizeof(header)) {
         tty_puts("apm: Invalid package format.\n");
-        fat32_close(f);
+        vfs_close(f);
         return -1;
     }
     
      
     if (header.magic != APM_MAGIC) {
         tty_puts("apm: Invalid package magic.\n");
-        fat32_close(f);
+        vfs_close(f);
         return -1;
     }
     
@@ -140,21 +124,21 @@ int apm_install(const char *path) {
     
     if (slot < 0) {
         tty_puts("apm: Package registry full.\n");
-        fat32_close(f);
+        vfs_close(f);
         return -1;
     }
     
      
     packages[slot].id = next_package_id++;
-    str_copy(packages[slot].name, header.name, 32);
-    str_copy(packages[slot].path, path, 64);
+    strncpy(packages[slot].name, header.name, 32);
+    strncpy(packages[slot].path, path, 64);
     packages[slot].lang = (apm_lang_t)header.lang;
     packages[slot].installed = true;
     packages[slot].size = header.code_size + header.data_size;
     
     package_count++;
     
-    fat32_close(f);
+    vfs_close(f);
     
     tty_printf("apm: Installed '%s' (%s)\n", header.name, apm_lang_name(packages[slot].lang));
     
@@ -239,8 +223,8 @@ int apm_setup(const char *source_path) {
     
     if (slot >= 0) {
         packages[slot].id = next_package_id++;
-        str_copy(packages[slot].name, app_name, 32);
-        str_copy(packages[slot].path, source_path, 64);
+        strncpy(packages[slot].name, app_name, 32);
+        strncpy(packages[slot].path, source_path, 64);
         packages[slot].lang = lang;
         packages[slot].installed = true;
         packages[slot].size = 0;
@@ -256,49 +240,80 @@ int apm_setup(const char *source_path) {
 }
 
 int apm_run(const char *name, int argc, char **argv) {
-     
-    apm_entry_t *pkg = apm_get(name);
-    if (!pkg) {
-        tty_printf("apm: Package '%s' not found.\n", name);
-        return -1;
-    }
-    
-    tty_printf("apm: Running '%s' (%s)...\n", pkg->name, apm_lang_name(pkg->lang));
-    
-     
-    switch (pkg->lang) {
-        case LANG_C:
-        case LANG_CPP:
-        case LANG_ASM_X86:
-        case LANG_ASM_X64:
-        case LANG_RUST:
-        case LANG_GOLANG:
-        case LANG_EXC:
-            tty_puts("[Running native executable...]\n");
-             
-            break;
-            
-        case LANG_PYTHON:
-            tty_puts("[Starting Python interpreter...]\n");
-             
-            break;
-            
-        case LANG_HTML:
-        case LANG_CSS:
-        case LANG_JS:
-            tty_puts("[Starting web runtime...]\n");
-             
-            break;
-            
-        default:
-            tty_puts("apm: Cannot run this package type.\n");
-            return -1;
-    }
-    
     (void)argc;
     (void)argv;
     
-    return 0;
+    // First check if it's a registered package
+    apm_entry_t *pkg = apm_get(name);
+    
+    if (pkg) {
+        tty_printf("apm: Running '%s' (%s)...\n", pkg->name, apm_lang_name(pkg->lang));
+        
+        switch (pkg->lang) {
+            case LANG_C:
+            case LANG_CPP:
+            case LANG_ASM_X86:
+            case LANG_ASM_X64:
+            case LANG_RUST:
+            case LANG_GOLANG:
+            case LANG_EXC:
+                tty_puts("[Native execution not implemented]\n");
+                break;
+                
+            case LANG_PYTHON:
+            case LANG_JS:
+                // Use script interpreter
+                return script_run_file(pkg->path);
+                
+            case LANG_HTML:
+            case LANG_CSS:
+                tty_puts("[Web runtime not implemented]\n");
+                break;
+                
+            default:
+                // Try script interpreter
+                return script_run_file(pkg->path);
+        }
+        return 0;
+    }
+    
+    // Not a registered package - try to run as script file directly
+    // Check if it looks like a path or has extension
+    bool is_path = false;
+    const char *p = name;
+    while (*p) {
+        if (*p == '/' || *p == '.') {
+            is_path = true;
+            break;
+        }
+        p++;
+    }
+    
+    if (is_path) {
+        return script_run_file(name);
+    }
+    
+    // Try with common extensions
+    char path[256];
+    const char *exts[] = {".ice", ".sh", ".py", ".lua", ".js", ".bas", NULL};
+    
+    for (int i = 0; exts[i]; i++) {
+        // Build path: /<name><ext>
+        int j = 0;
+        path[j++] = '/';
+        p = name;
+        while (*p && j < 250) path[j++] = *p++;
+        const char *ext = exts[i];
+        while (*ext && j < 255) path[j++] = *ext++;
+        path[j] = 0;
+        
+        if (vfs_exists(path)) {
+            return script_run_file(path);
+        }
+    }
+    
+    tty_printf("apm: Cannot find '%s'\n", name);
+    return -1;
 }
 
 void apm_list(void) {
@@ -332,7 +347,7 @@ int apm_remove(const char *name) {
     }
     
     for (int i = 0; i < MAX_PACKAGES; i++) {
-        if (packages[i].installed && str_cmp(packages[i].name, name) == 0) {
+        if (packages[i].installed && strcmp(packages[i].name, name) == 0) {
             packages[i].installed = false;
             package_count--;
             tty_printf("apm: Removed '%s'\n", name);
@@ -346,7 +361,7 @@ int apm_remove(const char *name) {
 
 apm_entry_t* apm_get(const char *name) {
     for (int i = 0; i < MAX_PACKAGES; i++) {
-        if (packages[i].installed && str_cmp(packages[i].name, name) == 0) {
+        if (packages[i].installed && strcmp(packages[i].name, name) == 0) {
             return &packages[i];
         }
     }
@@ -356,52 +371,57 @@ apm_entry_t* apm_get(const char *name) {
  
 int app_apm(int argc, char **argv) {
     if (argc < 2) {
+        vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
         tty_puts("APM - Application Process Manager\n\n");
+        vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
         tty_puts("Usage: apm <command> [args]\n\n");
         tty_puts("Commands:\n");
+        vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        tty_puts("  run <script>         Run a script file (.sh, .py, .ice, etc.)\n");
+        tty_puts("  setup <source>       Build from source file\n");
         tty_puts("  install <file.apm>   Install APM package\n");
-        tty_puts("  setup <source>       Build from source\n");
-        tty_puts("  run <app> [args]     Run installed app\n");
+        vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
         tty_puts("  list                 List installed packages\n");
         tty_puts("  remove <app>         Remove package [UPU]\n");
         tty_puts("  info <app>           Show package info\n");
-        tty_puts("  langs                List supported languages\n");
+        tty_puts("  langs                List supported languages\n\n");
+        tty_puts("Supported script types: .ice .sh .py .js .lua .bas .rb .pl\n");
         return 0;
     }
     
-    if (str_cmp(argv[1], "install") == 0) {
+    if (strcmp(argv[1], "install") == 0) {
         if (argc < 3) {
             tty_puts("Usage: apm install <package.apm>\n");
             return 1;
         }
         return apm_install(argv[2]);
     }
-    else if (str_cmp(argv[1], "setup") == 0) {
+    else if (strcmp(argv[1], "setup") == 0) {
         if (argc < 3) {
             tty_puts("Usage: apm setup <source_file>\n");
             return 1;
         }
         return apm_setup(argv[2]);
     }
-    else if (str_cmp(argv[1], "run") == 0) {
+    else if (strcmp(argv[1], "run") == 0) {
         if (argc < 3) {
             tty_puts("Usage: apm run <app_name> [args]\n");
             return 1;
         }
         return apm_run(argv[2], argc - 2, argv + 2);
     }
-    else if (str_cmp(argv[1], "list") == 0) {
+    else if (strcmp(argv[1], "list") == 0) {
         apm_list();
         return 0;
     }
-    else if (str_cmp(argv[1], "remove") == 0) {
+    else if (strcmp(argv[1], "remove") == 0) {
         if (argc < 3) {
             tty_puts("Usage: apm remove <app_name>\n");
             return 1;
         }
         return apm_remove(argv[2]);
     }
-    else if (str_cmp(argv[1], "info") == 0) {
+    else if (strcmp(argv[1], "info") == 0) {
         if (argc < 3) {
             tty_puts("Usage: apm info <app_name>\n");
             return 1;
@@ -419,7 +439,7 @@ int app_apm(int argc, char **argv) {
         tty_printf("  Size:     %d bytes\n", pkg->size);
         return 0;
     }
-    else if (str_cmp(argv[1], "langs") == 0) {
+    else if (strcmp(argv[1], "langs") == 0) {
         tty_puts("Supported Languages:\n\n");
         tty_puts("  Extension  Language    Description\n");
         tty_puts("  ---------  --------    -----------\n");

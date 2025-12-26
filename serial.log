@@ -1,0 +1,23 @@
+EXT2: read_block 2 -> dev_block 2 (count 1)
+EXT2: Mounted successfully. Block size: 1024, Groups: 4
+EXT2: list_dir: called with path='/'
+EXT2: resolve_path: empty path -> root inode 2
+EXT2: list_dir: resolve_path returned inode 2
+EXT2: read_block 132 -> dev_block 132 (count 1)
+EXT2: read_inode 2: mode=0x41ED size=1024 links=4
+EXT2: list_dir: inode 2 mode=0x41ED size=1024 block[0]=388
+EXT2: list_dir: listing '/' (size=1024)
+EXT2: read_block 388 -> dev_block 388 (count 1)
+EXT2: read_block 132 -> dev_block 132 (count 1)
+EXT2: read_inode 2: mode=0x41ED size=1024 links=4
+EXT2: list_dir: entry '.' ino=2 size=1024 dir=1
+EXT2: read_block 132 -> dev_block 132 (count 1)
+EXT2: read_inode 2: mode=0x41ED size=1024 links=4
+EXT2: list_dir: entry '..' ino=2 size=1024 dir=1
+EXT2: read_block 133 -> dev_block 133 (count 1)
+EXT2: read_inode 11: mode=0x41C0 size=12288 links=2
+EXT2: list_dir: entry 'lost+found' ino=11 size=12288 dir=1
+EXT2: read_block 133 -> dev_block 133 (count 1)
+EXT2: read_inode 12: mode=0x41ED size=1024 links=2
+EXT2: list_dir: entry 'testdir' ino=12 size=1024 dir=1
+EXT2: list_dir: found 4 entries

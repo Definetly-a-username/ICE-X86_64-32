@@ -2,7 +2,7 @@
 
 #include "bootval.h"
 #include "../drivers/vga.h"
-#include "../fs/fat32.h"
+#include "../fs/vfs.h"
 
  
 static const char *kernel_files[] = {
@@ -23,13 +23,13 @@ void bootval_init(void) {
 
 bool bootval_check_file(const char *path) {
      
-    if (!fat32_is_mounted()) {
+    if (!vfs_is_mounted()) {
         return true;   
     }
     
-    fat32_file_t *f = fat32_open(path);
+    vfs_file_t *f = vfs_open(path);
     if (f) {
-        fat32_close(f);
+        vfs_close(f);
         return true;
     }
     return false;
@@ -49,7 +49,7 @@ val_result_t bootval_validate(void) {
     vga_puts("===================\n\n");
     
      
-    if (!fat32_is_mounted()) {
+    if (!vfs_is_mounted()) {
         vga_puts("No disk mounted. Skipping validation.\n");
         return result;
     }

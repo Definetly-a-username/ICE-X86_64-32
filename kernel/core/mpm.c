@@ -13,6 +13,8 @@
 #include "../mm/pmm.h"
 #include "../apps/apps.h"
 #include "../net/net.h"
+#include "../gui/gui.h"
+#include "../frost/frost.h"
 
 #define ICE_VERSION "1.0.0"
 #define MAX_INPUT 128
@@ -104,14 +106,23 @@ static bool do_login(void) {
  
 
 static void cmd_help(void) {
+    vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
     tty_puts("ICE Shell Commands:\n\n");
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+    
     tty_puts("  pm          Process Manager\n");
     tty_puts("  gpm         General Process Manager\n");
     tty_puts("  apps        List built-in applications\n");
+    tty_puts("  frost/gui   Start Frost GUI layer\n");
+    tty_puts("  netauto     Auto-configure network\n");
     tty_puts("  logout      Logout current user\n");
     tty_puts("  help        Show this help\n");
     tty_puts("  clear       Clear screen\n\n");
+    
+    vga_set_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
     tty_puts("Type 'apps' to see available programs.\n");
+    tty_puts("Type 'apm run <script>' to run scripts.\n");
+    vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
 }
 
 static void cmd_pm(int argc, char **argv) {
@@ -250,40 +261,75 @@ void mpm_shell(void) {
     char input[MAX_INPUT];
     char *argv[MAX_ARGS];
     
-     
+    // Initialize GUI system
+    gui_init();
+    
+    // Show boot menu to choose GUI or TTY mode
+    gui_mode_t mode = gui_boot_menu();
+    
+    // Print login banner
     sysinfo_print_login_banner();
     
-     
+    // Attempt login
     while (!do_login()) {
         pit_sleep_ms(2000);
         sysinfo_print_login_banner();
+    }
+    
+    // If GUI mode selected, run Frost GUI layer
+    if (mode == GUI_MODE_GRAPHIC) {
+        tty_puts("\nStarting Frost GUI layer...\n");
+        pit_sleep_ms(500);
+        frost_run();
+        // When Frost exits, continue to TTY
+        tty_puts("\nReturned to text mode.\n");
     }
     
     tty_puts("\nType 'help' for commands, 'apps' for programs.\n\n");
     
      
     while (1) {
-         
+        // Enhanced prompt with better colors and formatting
         user_t *u = user_get_current();
         if (u) {
+            // Username with color coding
             if (u->type == USER_TYPE_UPU) {
                 vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
             } else {
                 vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
             }
             vga_printf("%s", u->username);
-            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            
+            // Separator
+            vga_set_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
             vga_puts("@");
+            
+            // Hostname
+            vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+            vga_puts("ice");
+            
+            // Current directory (simplified - always / for now)
+            vga_set_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+            vga_puts(":");
+            vga_set_color(VGA_COLOR_LIGHT_BLUE, VGA_COLOR_BLACK);
+            vga_puts("/");
+            
+            // Prompt symbol
+            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            if (u->type == USER_TYPE_UPU) {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                vga_puts("# ");
+            } else {
+                vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+                vga_puts("$ ");
+            }
+            vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+        } else {
+            // Fallback prompt
             vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
             vga_puts("ice");
             vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
-            if (u->type == USER_TYPE_UPU) {
-                vga_puts("# ");
-            } else {
-                vga_puts("$ ");
-            }
-        } else {
-            tty_print_prompt();
+            vga_puts("> ");
         }
         
         if (tty_getline(input, sizeof(input)) == 0) {
@@ -292,6 +338,9 @@ void mpm_shell(void) {
         
         int argc = parse_args(input, argv);
         if (argc == 0) continue;
+        
+        // Add to command history
+        add_to_history(input);
         
          
         if (apps_find(argv[0])) {
@@ -328,6 +377,35 @@ void mpm_shell(void) {
         else if (strcmp(argv[0], "exit") == 0 || strcmp(argv[0], "halt") == 0) {
             tty_puts("Shutting down ICE...\n");
             __asm__ volatile ("cli; hlt");
+        }
+        else if (strcmp(argv[0], "gui") == 0 || strcmp(argv[0], "frost") == 0) {
+            tty_puts("Starting Frost GUI...\n");
+            frost_run();
+            tty_puts("Returned to TTY mode.\n");
+        }
+        else if (strcmp(argv[0], "netauto") == 0 || strcmp(argv[0], "dhcp") == 0) {
+            // Auto-configure network
+            if (!net_is_available()) {
+                vga_set_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                tty_puts("No network interface available.\n");
+                vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            } else {
+                vga_set_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+                tty_puts("Auto-configuring network...\n");
+                vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+                
+                // Set a default IP (DHCP would be more complex)
+                // Using link-local auto-configuration (169.254.x.x)
+                net_set_ip(0, IP(169, 254, 1, 100), IP(255, 255, 0, 0));
+                net_set_gateway(IP(169, 254, 1, 1));
+                
+                vga_set_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+                tty_puts("Network configured:\n");
+                tty_puts("  IP: 169.254.1.100\n");
+                tty_puts("  Netmask: 255.255.0.0\n");
+                tty_puts("  Gateway: 169.254.1.1\n");
+                vga_set_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+            }
         }
         else {
             tty_printf("Unknown command: %s\n", argv[0]);

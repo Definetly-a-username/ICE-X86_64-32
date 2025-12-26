@@ -2,6 +2,10 @@
 
 #include "pmm.h"
 #include "../drivers/vga.h"
+#include "../sync/spinlock.h"
+
+static spinlock_t pmm_lock;
+
 
  
 typedef struct {
@@ -79,7 +83,9 @@ static void mark_range_free(phys_addr_t start, u32 size) {
 void pmm_init(void *mboot_info) {
     multiboot_info_t *mbi = (multiboot_info_t*)mboot_info;
     
-     
+    spinlock_init(&pmm_lock);
+    
+    // Initialize bitmap
     for (u32 i = 0; i < sizeof(page_bitmap); i++) {
         page_bitmap[i] = 0xFF;
     }
@@ -112,23 +118,62 @@ void pmm_init(void *mboot_info) {
     mark_range_used(0x100000, 0x100000);
 }
 
+static u32 last_alloc_index = 256;
+
 phys_addr_t pmm_alloc_page(void) {
-    for (u32 i = 256; i < MAX_PAGES; i++) {   
+    spinlock_acquire(&pmm_lock);
+    
+    u32 start_index = last_alloc_index;
+    u32 i = start_index;
+    
+    // Quick check: if last_alloc_index is free (shouldn't happen often if we update it), take it
+    // Otherwise scan
+    
+    // Optimized search: 32 bits at a time
+    // We need to handle the case where i is not 32-bit aligned, but for simplicity
+    // let's just do linear search if we are in the middle of a word, or just align 'i'.
+    // Since we want to be fast, let's try to align 'i' first.
+    
+    // Scan loop
+    do {
+        // optimize: check 32 bits at once if aligned
+        if ((i & 31) == 0 && i + 32 < MAX_PAGES) {
+            u32 *ptr = (u32*)&page_bitmap[i / 8];
+            if (*ptr == 0xFFFFFFFF) {
+                i += 32;
+                if (i >= MAX_PAGES) i = 256; // wrap around
+                continue;
+            }
+        }
+        
         if (!bitmap_test(i)) {
+            // Found free page
             bitmap_set(i);
             used_pages++;
+            last_alloc_index = i + 1;
+            if (last_alloc_index >= MAX_PAGES) last_alloc_index = 256;
+            
+            spinlock_release(&pmm_lock);
             return i * PAGE_SIZE;
         }
-    }
+        
+        i++;
+        if (i >= MAX_PAGES) i = 256; // wrap around
+        
+    } while (i != start_index);
+
+    spinlock_release(&pmm_lock);
     return 0;   
 }
 
 void pmm_free_page(phys_addr_t addr) {
+    spinlock_acquire(&pmm_lock);
     u32 page = addr / PAGE_SIZE;
     if (page < MAX_PAGES && bitmap_test(page)) {
         bitmap_clear(page);
         used_pages--;
     }
+    spinlock_release(&pmm_lock);
 }
 
 u32 pmm_get_total_memory(void) {
